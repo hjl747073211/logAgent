@@ -6,7 +6,8 @@ import (
 	"logAgent/conf"
 	"logAgent/etcd"
 	"logAgent/kafka"
-
+	"logAgent/taillog"
+	"sync"
 	"time"
 
 	"gopkg.in/ini.v1"
@@ -19,14 +20,14 @@ var cfg = new(conf.AppConf)
 
 func main() {
 	//加载配置文件,映射到cfg
-
 	err := ini.MapTo(cfg, "./conf/config.ini")
 	if err != nil {
 		fmt.Printf("ini load failed,err:%v", err)
 		return
 	}
+
 	//1.初始化kafka的链接
-	err = kafka.Init([]string{cfg.KafkaConf.Address})
+	err = kafka.Init([]string{cfg.KafkaConf.Address}, cfg.KafkaConf.ChanMaxSize)
 	if err != nil {
 		fmt.Printf("init kafka failed,err:%v", err)
 		return
@@ -41,32 +42,21 @@ func main() {
 	}
 	fmt.Println("etcd init success")
 
-	logEntryConf, err := etcd.GetConf("/xxx")
+	logEntryConf, err := etcd.GetConf(cfg.EtcdConf.Key)
 	if err != nil {
 		fmt.Printf("etcd getconf failed, err:%v\n", err)
 		return
 	}
 	fmt.Printf("etcd getconf success,%v\n", logEntryConf)
 
-	// //2.打开日志文件准备读取日志
-	// err = taillog.Init(cfg.TaillogConf.FileName) //传入日志文件的路径
-	// if err != nil {
-	// 	fmt.Printf("init tail failed,err:%v", err)
-	// 	return
-	// }
-	// fmt.Println("taillog init success")
-	// run()
-}
+	//3.从etcd中获取配置项
+	taillog.Init(logEntryConf)
 
-// func run() {
-// 	//1.读取日志
-// 	for {
-// 		select {
-// 		case line := <-taillog.ReadChan():
-// 			//2.发送到kafka
-// 			kafka.SendToKafka(cfg.KafkaConf.Topic, line.Text)
-// 		default:
-// 			time.Sleep(time.Second)
-// 		}
-// 	}
-// }
+	//开启watch，检测配置项的变化
+	newConfChan := taillog.NewConfChan()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go etcd.WatchConf(cfg.EtcdConf.Key, newConfChan)
+	wg.Wait()
+
+}

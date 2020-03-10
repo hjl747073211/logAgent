@@ -1,0 +1,8 @@
+
+开启zookeeper
+E:\kafka_2.13-2.4.0>bin\windows\zookeeper-server-start.bat config\zookeeper.properties
+
+开启kafka
+E:\kafka_2.13-2.4.0>bin\windows\kafka-server-start.bat config\server.properties
+
+etcd用于配置的注册发现
